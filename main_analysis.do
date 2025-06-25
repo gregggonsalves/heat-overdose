@@ -144,6 +144,8 @@ foreach outcome in rate_drugod_all ///
 	rate_drugodoth_natheat rate_drugodoth_dehyd ///
 	rate_drugodoth_cardiovasc rate_drugodoth_clrd ///
 	rate_drugoddesp_suicide rate_drugoddesp_asslt ///
+	///
+	rate_placcanc_mel rate_placcanc_breast rate_placcanc_colon ///
 	{
 
 	reghdfe `outcome' avg_heatindex [aw=pop_total], ///
@@ -151,7 +153,6 @@ foreach outcome in rate_drugod_all ///
 	estimates store O`outcome'
 	
 }
-
 
 * FIGURE:
 
@@ -161,6 +162,8 @@ coefplot (Orate_drugod_all \ ///
 	Orate_drugodoth_natheat \ Orate_drugodoth_dehyd \ ///
 	Orate_drugodoth_cardiovasc \ Orate_drugodoth_clrd \ ///
 	Orate_drugoddesp_suicide \ Orate_drugoddesp_asslt \ ///
+	///
+	Orate_placcanc_mel \ Orate_placcanc_breast \ Orate_placcanc_colon \ ///	
 	), ///
 	keep(avg_heatindex) ///
 	aseq swapnames ///
@@ -173,11 +176,16 @@ coefplot (Orate_drugod_all \ ///
 		Orate_drugodoth_clrd = "Chronic lower respiratory causes"  ///
 		Orate_drugoddesp_suicide = "Suicide"  ///
 		Orate_drugoddesp_asslt = "Assault" ///
+		///
+		Orate_placcanc_mel = "Melanoma of the skin" ///
+		Orate_placcanc_breast = "Breast cancer"  ///
+		Orate_placcanc_colon = "Colon cancer" ///		
 		) ///
 	xline(0, lcolor(black)) ///
 	xtitle("Effect of one degree C increase on deaths per 100,000") ///
 	headings(Orate_drugod_all = "{bf:Main results:}" ///
 		Orate_any_death = "{bf: Other causes of death:}" ///
+		Orate_placcanc_mel = "{bf: Cancer deaths:}" ///			
 		) ///
 	mcolor(black) ciopts(lcolor(black))
 graph export "`figout'\fig_othercauses.svg", replace

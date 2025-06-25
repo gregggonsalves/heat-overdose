@@ -42,8 +42,11 @@ drop _merge
 
 *** Map for continental US
 format avg_heatindex %12.1f
+
 spmap avg_heatindex using "`map'\countycoord.dta", id(id) ///
-	fcolor(Reds) title("Means of the heat index by county")
+	fcolor(Reds) title("Means of the heat index by county") ///
+	legend(size(*2))
+
 graph export "`figout'\map_avg_heatindex.svg", replace
 
 restore
@@ -71,8 +74,11 @@ drop _merge
 * Generate map - continental US
 
 format avg_heatindex %12.1f
+
 spmap avg_heatindex using "`map'\countycoord.dta", id(id) ///
-		fcolor(Greens) title("Variation in the heat index by county")
+		fcolor(Greens) title("Variation in the heat index by county") ///
+	legend(size(*2))
+		
 graph export "`figout'\map_avg_heatindex_sd.svg", replace
 
 restore

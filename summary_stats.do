@@ -34,7 +34,9 @@ label var year "Year"
 
 twoway (connected avg_heatindex year) ///
 	(lfit avg_heatindex year), ///
+	ytitle("Degrees Celsius") ///
 	legend(ring(0) pos(5))
+
 graph export "`figout'\appendix_heatindex_byyear.svg", replace
 
 restore
@@ -161,18 +163,17 @@ keep fips_county year month pop_total ///
 	`varlist_exp' `varlist_poll' `varlist_outcomes'
 
 
-* GENERATE OVERALL MEANS	
+* GENERATE OVERALL MEANS AND MEDIANS
 	
 *** Unit count
 sum `varlist_exp' `varlist_poll' `varlist_outcomes'
 
 preserve
 
-*** Generate means
+*** Generate means and medians
 sum `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total]
-mean `varlist_exp' `varlist_outcomes' [aw=pop_total]
-mean `varlist_poll' [aw=pop_total]
-collapse (mean) `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total]
+mean `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total]
+collapse (mean) `varlist_exp' `varlist_poll' (median) `varlist_outcomes' [aw=pop_total]
 list
 
 *** Tranpose data set for output and relabel
@@ -194,13 +195,45 @@ save "`temp'\means_analyticsample.dta", replace
 restore
 
 
-* GENERATE OVERALL SD	
+*************************** Generate overdose means for Table S2
+
+preserve
+	
+*** Unit count
+sum `varlist_outcomes'
+
+*** Generate means
+sum `varlist_outcomes' [aw=pop_total]
+mean `varlist_outcomes' [aw=pop_total]
+collapse (mean) `varlist_outcomes' [aw=pop_total]
+list
+
+*** Tranpose data set for output and relabel
+xpose, clear varname promote	
+gen varlabel=""
+local varsforlabel `varlist_outcomes'
+foreach var in `varsforlabel' {
+	replace varlabel="`l`var''" if _varname=="`var'"
+}
+
+drop _varname
+
+*** Output
+gen tableorder=_n
+rename v1 mean
+order varlabel
+save "`temp'\table2overdosemeans.dta", replace
+
+restore
+
+
+* GENERATE OVERALL SD AND IQR
 	
 preserve
 
-*** Generate sd
+*** Generate sd and iqr
 sum `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total]
-collapse (sd) `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total]
+collapse (sd) `varlist_exp' `varlist_poll' (iqr) `varlist_outcomes' [aw=pop_total]
 list
 
 *** Tranpose data set for output and relabel
@@ -221,7 +254,7 @@ save "`temp'\sd_analyticsample.dta", replace
 restore
 
 
-* COMBINE OVERALL MEAN AND SD
+* COMBINE OVERALL MEAN/MEDIAN AND SD/IQR
 preserve
 use "`temp'\means_analyticsample.dta", clear
 merge 1:1 varlabel using "`temp'\sd_analyticsample.dta"
@@ -255,15 +288,14 @@ sum `varlist_exp' `varlist_poll' `varlist_outcomes' if abovemedianheatindex==0
 sum `varlist_exp' `varlist_poll' `varlist_outcomes' if abovemedianheatindex==1
 
 
-* GENERATE MEANS ABOVE AND BELOW MEDIAN HEAT INDEX
+* GENERATE MEANS AND MEDIANS ABOVE AND BELOW MEDIAN HEAT INDEX
 
 preserve
 
-*** Generate means
+*** Generate means and medians
 bysort abovemedianheatindex: sum `varlist_exp' `varlist_outcomes' [aw=pop_total]
-mean `varlist_exp' `varlist_outcomes' [aw=pop_total], over(abovemedianheatindex)
-mean `varlist_poll' [aw=pop_total], over(abovemedianheatindex)
-collapse (mean) `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total], by(abovemedianheatindex)
+mean `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total], over(abovemedianheatindex)
+collapse (mean) `varlist_exp' `varlist_poll' (median) `varlist_outcomes' [aw=pop_total], by(abovemedianheatindex)
 list
 
 *** Tranpose data set for output and relabel
@@ -287,13 +319,13 @@ restore
 
 
 
-* GENERATE SD ABOVE AND BELOW MEDIAN HEAT INDEX
+* GENERATE SD AND IQR ABOVE AND BELOW MEDIAN HEAT INDEX
 
 preserve
 
-*** Generate sd
+*** Generate sd and iqr
 bysort abovemedianheatindex: sum `varlist_exp' `varlist_outcomes' [aw=pop_total]
-collapse (sd) `varlist_exp' `varlist_poll' `varlist_outcomes' [aw=pop_total], by(abovemedianheatindex)
+collapse (sd) `varlist_exp' `varlist_poll' (iqr) `varlist_outcomes' [aw=pop_total], by(abovemedianheatindex)
 list
 
 *** Tranpose data set for output and relabel
@@ -315,8 +347,7 @@ save "`temp'\sd_analyticsample_bymedheat.dta", replace
 restore
 
 
-
-*** COMBINE MEAN AND SD  ABOVE AND BELOW MEDIAN HEAT INDEX
+*** COMBINE MEAN/MEDIAN AND SD/IQR ABOVE AND BELOW MEDIAN HEAT INDEX
 use "`temp'\means_analyticsample_bymedheat.dta", clear
 merge 1:1 varlabel using "`temp'\sd_analyticsample_bymedheat.dta"
 drop _merge
@@ -347,7 +378,10 @@ foreach y in 2006 2013 {
 * Define variable lists into tables (main and appendix)
 
 *** County-level mean variables (non-pop)
-local varlist_cntymean med_hhi_2000 med_hhi_2020 svi_2000 svi_2020 ///
+local varlist_cntymean med_hhi_2000 med_hhi_2020
+
+*** County-level median variables
+local varlist_cntymed svi_2000 svi_2020
 	
 *** County-level mean variables (pop)
 local varlist_cntymeanpop pop_male pop_female pop_age0to29 pop_age30to59 pop_age60plus pop_nhwhite pop_nhblack pop_hisp
@@ -363,22 +397,22 @@ local tableorder divEastMSRiver ///
 	pct_pop_male pct_pop_female ///
 	pct_pop_age0to29 pct_pop_age30to59 pct_pop_age60plus ///
 	pct_pop_nhwhite pct_pop_nhblack pct_pop_hisp
-	
+
 * Keep relevant variables
 keep fips_county year month pop_total ///
-	`varlist_cntymean' `varlist_cntymeanpop' `varlist_cntycountpct' ///
+	`varlist_cntymean' `varlist_cntymed' `varlist_cntymeanpop' `varlist_cntycountpct' ///
 	avg_heatindex
-	
+
 * Check units - before county-level
-sum `varlist_cntymean' `varlist_cntymeanpop' `varlist_cntycountpct' avg_heatindex
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntymeanpop' `varlist_cntycountpct' avg_heatindex
 
 * Collapse data to county-year-level (over months)
 *** All variables fixed over county, except pop by county & year, and heat index (used below)
-collapse (mean) `varlist_cntymean' `varlist_cntymeanpop' `varlist_cntycountpct' ///
+collapse (mean) `varlist_cntymean' `varlist_cntymed' `varlist_cntymeanpop' `varlist_cntycountpct' ///
 	pop_total avg_heatindex, by(fips_county year)
 	
 * Collapse to county-level (over years)
-collapse (mean) `varlist_cntymean' `varlist_cntycountpct' avg_heatindex ///
+collapse (mean) `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' avg_heatindex ///
 	mean_pop_total=pop_total ///
 	(sum) `varlist_cntymeanpop' ///
 	tot_pop_total=pop_total, ///
@@ -394,10 +428,11 @@ foreach dem in male female ///
 
 }
 drop pop* tot_pop_total
-local varlist_cntymeanPCTPOP pct_pop_male pct_pop_female ///
-	pct_pop_age0to29 pct_pop_age30to59 pct_pop_age60plus ///
-	pct_pop_nhwhite pct_pop_nhblack pct_pop_hisp
 
+local varlist_cntymeanPCTPOP pct_pop_male pct_pop_female ///
+	pct_pop_age0to29 pct_pop_age30to59 pct_pop_age60plus
+
+local varlist_cntymedianPCTPOP pct_pop_nhwhite pct_pop_nhblack pct_pop_hisp
 
 * Label all variables
 
@@ -425,23 +460,24 @@ label var pct_pop_hisp "Hispanic (any race) (%)"
 label var pct_pop_nhwhite "White (non-Hispanic) (%)"
 
 *** Label and store labels
-foreach var of varlist `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' {
+foreach var of varlist `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' ///
+	`varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' {
 	local l`var': variable label `var'
 }
 
 * County-level unit count
-sum `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' 
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP'
 
-
-* GENERATE OVERALL MEANS (AND COUNTS)
+* GENERATE OVERALL MEANS AND MEDIANS (AND COUNTS)
 
 preserve
 
 *** Generate means (and counts)
-sum `varlist_cntymean' `varlist_cntymeanPCTPOP' [aw=mean_pop_total]
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' [aw=mean_pop_total]
 mean `varlist_cntymean' `varlist_cntymeanPCTPOP'  [aw=mean_pop_total]
 collapse (mean) `varlist_cntymean' `varlist_cntymeanPCTPOP' ///
 	(rawsum) `varlist_cntycountpct' county_totcnt ///
+	(median) `varlist_cntymed' `varlist_cntymedianPCTPOP' ///
 	[aw=mean_pop_total]
 drop county_totcnt
 order `tableorder'
@@ -450,7 +486,7 @@ list
 *** Tranpose data set for output and relabel
 xpose, clear varname promote	
 gen varlabel=""
-local varsforlabel `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP'
+local varsforlabel `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP'
 foreach var in `varsforlabel' {
 	replace varlabel="`l`var''" if _varname=="`var'"
 }
@@ -466,14 +502,15 @@ save "`temp'\means_county.dta", replace
 restore
 
 
-* GENERATE OVERALL SD (AND PCT VALUES)
+* GENERATE OVERALL SD AND IQR (AND PCT VALUES)
 
 preserve
 
-*** Generate sd (and percents)
-sum `varlist_cntymean' `varlist_cntymeanPCTPOP' [aw=mean_pop_total]
+*** Generate sd and iqr (and percents)
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' [aw=mean_pop_total]
 collapse (sd) `varlist_cntymean' `varlist_cntymeanPCTPOP' ///
-		(rawsum) `varlist_cntycountpct' county_totcnt /// 
+		(rawsum) `varlist_cntycountpct' county_totcnt ///
+		(iqr) `varlist_cntymed' `varlist_cntymedianPCTPOP' ///		
 		[aw=mean_pop_total]
 *** Calculate county percents (rescaled by 100)
 foreach cnty in divEastMSRiver ///
@@ -490,12 +527,13 @@ list
 *** Tranpose data set for output and relabel
 xpose, clear varname promote	
 gen varlabel=""
-local varsforlabel `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP'
+local varsforlabel `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP'
 foreach var in `varsforlabel' {
 	replace varlabel="`l`var''" if _varname=="`var'"
 }
 
 drop _varname
+
 
 ***** Output
 rename v1 sd_pct
@@ -505,7 +543,7 @@ save "`temp'\sd_county.dta", replace
 restore
 
 
-* COMBINE OVERALL MEAN AND SD
+* COMBINE OVERALL MEAN/MEDIAN AND SD/IQR
 preserve
 use "`temp'\means_county.dta", clear
 merge 1:1 varlabel using "`temp'\sd_county.dta"
@@ -516,7 +554,6 @@ drop tableorder
 list
 save "`temp'\sumstats_county.dta", replace
 restore
-
 
 
 * CALCULATE MEDIAN HEAT INDEX VALUE
@@ -536,19 +573,20 @@ sum avg_heatindex if abovemedianheatindex==0
 sum avg_heatindex if abovemedianheatindex==1
 
 *** Unit count
-sum `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' if abovemedianheatindex==0
-sum `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' if abovemedianheatindex==1
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' if abovemedianheatindex==0
+sum `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' if abovemedianheatindex==1
 
 
-* GENERATE MEANS (AND COUNTS) ABOVE AND BELOW MEDIAN HEAT INDEX
+* GENERATE MEANS AND MEDIANS (AND COUNTS) ABOVE AND BELOW MEDIAN HEAT INDEX
 
 preserve
 
 *** Generate means (and counts)
-bysort abovemedianheatindex: sum `varlist_cntymean' `varlist_cntymeanPCTPOP' [aw=mean_pop_total]
+bysort abovemedianheatindex: sum `varlist_cntymean' `varlist_cntymed' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP' [aw=mean_pop_total]
 mean `varlist_cntymean' `varlist_cntymeanPCTPOP' [aw=mean_pop_total], over(abovemedianheatindex)
 collapse (mean) `varlist_cntymean' `varlist_cntymeanPCTPOP' ///
 	(rawsum) `varlist_cntycountpct' county_totcnt ///
+	(median) `varlist_cntymed' `varlist_cntymedianPCTPOP' ///	
 	[aw=mean_pop_total], by(abovemedianheatindex)
 drop county_totcnt
 order `tableorder'
@@ -557,7 +595,7 @@ list
 *** Tranpose data set for output and relabel
 xpose, clear varname promote	
 gen varlabel=""
-local varsforlabel `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP'
+local varsforlabel `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP'
 foreach var in `varsforlabel' {
 	replace varlabel="`l`var''" if _varname=="`var'"
 }
@@ -574,14 +612,15 @@ save "`temp'\means_county_bymedheat.dta", replace
 restore
 
 
-* GENERATE SD (AND PCT VALUES)  ABOVE AND BELOW MEDIAN HEAT INDEX
+* GENERATE SD AND IQR (AND PCT VALUES) ABOVE AND BELOW MEDIAN HEAT INDEX
 
 preserve
 
 *** Generate sd (and percents)
 bysort abovemedianheatindex: sum `varlist_cnty' [aw=mean_pop_total]
 collapse (sd) `varlist_cntymean' `varlist_cntymeanPCTPOP' ///
-		(rawsum) `varlist_cntycountpct' county_totcnt /// 
+		(rawsum) `varlist_cntycountpct' county_totcnt ///
+		(iqr) `varlist_cntymed' `varlist_cntymedianPCTPOP' ///				
 		[aw=mean_pop_total], by(abovemedianheatindex)
 *** Calculate county percents (rescaled by 100)
 foreach cnty in divEastMSRiver ///
@@ -594,16 +633,16 @@ drop county_totcnt
 order `tableorder'
 list
 
-
 *** Tranpose data set for output and relabel
 xpose, clear varname promote	
 gen varlabel=""
-local varsforlabel `varlist_cntymean' `varlist_cntycountpct' `varlist_cntymeanPCTPOP'
+local varsforlabel `varlist_cntymean' `varlist_cntymed' `varlist_cntycountpct' `varlist_cntymeanPCTPOP' `varlist_cntymedianPCTPOP'
 foreach var in `varsforlabel' {
 	replace varlabel="`l`var''" if _varname=="`var'"
 }
 replace varlabel="Above median heat index (`hi_median_round' degC)" if _varname=="abovemedianheatindex"
 drop _varname
+
 
 ***** Output
 rename v1 sd_pct0
@@ -614,7 +653,7 @@ save "`temp'\sd_county_bymedheat.dta", replace
 restore
 
 
-*** COMBINE MEAN AND SD
+*** COMBINE MEAN/MEDIAN AND SD/IQR
 use "`temp'\means_county_bymedheat.dta", clear
 merge 1:1 varlabel using "`temp'\sd_county_bymedheat.dta"
 drop _merge
@@ -642,6 +681,9 @@ use "`temp'\sumstats_county.dta"
 export excel using "`out'\summary_stats.xlsx", sheetreplace sheet("County level")
 use "`temp'\sumstats_county_bymedheat.dta"	
 export excel using "`out'\summary_stats.xlsx", sheetreplace sheet("County level med heat")
+*** Added:
+use "`temp'\table2overdosemeans.dta"
+export excel using "`out'\summary_stats.xlsx", sheetreplace sheet("Table S2 OD means")
 
 
 log close

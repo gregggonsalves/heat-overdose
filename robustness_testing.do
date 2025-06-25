@@ -245,12 +245,18 @@ foreach outcome in rate_drugod_all {
 		lag_`outcome' totsp_`outcome' [aw=pop_total], ///
 		absorb(i.fips_county#i.month i.state#i.year) vce(cluster i.fips_county#i.month)
 	estimates store SPEC_QuasiLagBoth		
-	
+
+	*** Drop 2020
+	preserve
+	drop if year==2020
+	tab year, missing	
+	reghdfe `outcome' avg_heatindex [aw=pop_total], ///
+		absorb(i.fips_county#i.month i.state#i.year) vce(cluster i.fips_county#i.month)
+	estimates store SPEC_Drop2020
+	restore
+
 }
 
-
-
-* FIGURE:
 
 coefplot (SPEC_Main \ ///
 	///
@@ -258,10 +264,12 @@ coefplot (SPEC_Main \ ///
 	///
 	SPEC_NoWeight \ ///
 	///
-	SPEC_ClusterCountyYear \ SPEC_ClusterCounty \ SPEC_ClusterStateMonth ///
+	SPEC_ClusterCountyYear \ SPEC_ClusterCounty \ SPEC_ClusterStateMonth \ ///
 	SPEC_ClusterStateYear \ SPEC_ClusterState \ ///
 	///
-	SPEC_QuasiLagMonth \SPEC_QuasiLagSpring \ SPEC_QuasiLagBoth ///
+	SPEC_QuasiLagMonth \SPEC_QuasiLagSpring \ SPEC_QuasiLagBoth \ ///
+	///
+	SPEC_Drop2020 \ ///
 	), ///
 	keep(avg_heatindex) ///
 	aseq swapnames ///
@@ -283,6 +291,8 @@ coefplot (SPEC_Main \ ///
 		SPEC_QuasiLagMonth = "Lagged one month" ///		
 		SPEC_QuasiLagSpring = "Lagged March-May total" ///				
 		SPEC_QuasiLagBoth = "Both" ///
+		///
+		SPEC_Drop2020 = "Year 2020 excluded" ///		
 		) ///
 	xline(0, lcolor(black)) ///
 	xtitle("Effect of one degree C increase on deaths per 100,000") ///
@@ -291,17 +301,16 @@ coefplot (SPEC_Main \ ///
 		SPEC_NoWeight = "{bf: Weighting:}" ///
 		SPEC_ClusterCountyYear = "{bf:Standard error clustering:}" ///
 		SPEC_QuasiLagMonth = "{bf:Overdose rates as controls:}" ///		
+		SPEC_Drop2020 = "{bf:Before COVID-19:}" ///				
 		) ///
 	mcolor(black) ciopts(lcolor(black))
 graph export "`figout'\fig_supp_specrob.svg", replace
 
 
 
-******************************************* Placebo tests
+******************************************* Lag tests
 
 * REGRESSIONS:
-
-*** Lagged
 
 foreach outcome in rate_drugod_all {
 
@@ -336,28 +345,6 @@ foreach outcome in rate_drugod_all {
 }
 
 
-
-*** Cancers
-
-foreach outcome in rate_drugod_all {
-
-	reghdfe `outcome' avg_heatindex [aw=pop_total], ///
-		absorb(i.fips_county#i.month i.state#i.year) vce(cluster i.fips_county#i.month)
-	estimates store PC_MainResult
-
-}
-
-foreach outcome in rate_placcanc_mel rate_placcanc_breast rate_placcanc_colon {
-
-	reghdfe `outcome' avg_heatindex [aw=pop_total], ///
-		absorb(i.fips_county#i.month i.state#i.year) vce(cluster i.fips_county#i.month)
-	estimates store PC_`outcome'
-		
-}
-
-
-* FIGURE:
-	
 coefplot (PL_MainResult \ PL_CurrandLag \ PL_Lagged_Only \ ///
 	), ///
 	keep(main_avg_heatindex lagonly_avg_heatindex_lag1 comb_avg_heatindex comb_avg_heatindex_lag1) ///
@@ -367,32 +354,11 @@ coefplot (PL_MainResult \ PL_CurrandLag \ PL_Lagged_Only \ ///
 		comb_avg_heatindex = "{bf: Current and lagged exposure:}" ///	
 		lagonly_avg_heatindex_lag1 = "{bf: Lagged exposure only:}" ///		
 		) ///
-	mcolor(black) ciopts(lcolor(black)) ///
-	subtitle("{bf:Panel A: Lagged heat exposure}")	
+	mcolor(black) ciopts(lcolor(black))
 graph export "`figout'\fig_supp_placebo_lag.svg", replace	
-	
-coefplot (PC_MainResult \ ///
-	///
-	PC_rate_placcanc_mel \ PC_rate_placcanc_breast \ PC_rate_placcanc_colon \ ///
-	), ///
-	keep(avg_heatindex) ///
-	aseq swapnames ///
-	coeflabels(PC_MainResult = "All drug overdoses" ///
-		///
-		PC_rate_placcanc_mel = "Melanoma of the skin" ///
-		PC_rate_placcanc_breast = "Breast cancer"  ///
-		PC_rate_placcanc_colon = "Colon cancer" ///
-		) ///
-	xline(0, lcolor(black)) ///
-	xtitle("Effect of one degree C increase on deaths per 100,000") ///
-	headings(PC_MainResult = "{bf: Main result:}" ///	
-		PC_rate_placcanc_mel = "{bf: Cancer deaths:}" ///	
-		) ///
-	mcolor(black) ciopts(lcolor(black)) ///
-	subtitle("{bf:Panel B: Cancer deaths}")
-graph export "`figout'\fig_supp_placebo_cancer.svg", replace
-	
-	
+
+
+
 
 ******************************************* Is any single Census Divison driving results?
 
@@ -457,7 +423,7 @@ graph export "`figout'\fig_supp_dropdiv.svg", replace
 
 ******************************************* OUTPUT ABOVE ESTIMATE VALUES
 
-esttab Exp_* SPEC_* PL_* PC_* D_* using table_robust_estimates.csv, replace ///
+esttab Exp_* SPEC_* PL_* D_* using table_robust_estimates.csv, replace ///
 		se ///
 		star(* 0.05 ** 0.01 *** 0.001) ///
 		order(avg_heatindex) ///
